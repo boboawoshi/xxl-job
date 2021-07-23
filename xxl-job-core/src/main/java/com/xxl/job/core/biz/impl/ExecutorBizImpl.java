@@ -46,11 +46,13 @@ public class ExecutorBizImpl implements ExecutorBiz {
     @Override
     public ReturnT<String> run(TriggerParam triggerParam) {
         // load old：jobHandler + jobThread
+        // 查询是否缓存过对应job的执行线程
         JobThread jobThread = XxlJobExecutor.loadJobThread(triggerParam.getJobId());
         IJobHandler jobHandler = jobThread!=null?jobThread.getHandler():null;
         String removeOldReason = null;
 
         // valid：jobHandler + jobThread
+        // 根据不同运行模式，验证job执行线程 和 job处理方式（可缓存）
         GlueTypeEnum glueTypeEnum = GlueTypeEnum.match(triggerParam.getGlueType());
         if (GlueTypeEnum.BEAN == glueTypeEnum) {
 
@@ -119,14 +121,17 @@ public class ExecutorBizImpl implements ExecutorBiz {
         }
 
         // executor block strategy
+        // 阻塞处理策略：单机串行、丢弃后续调度，覆盖之前调度
         if (jobThread != null) {
             ExecutorBlockStrategyEnum blockStrategy = ExecutorBlockStrategyEnum.match(triggerParam.getExecutorBlockStrategy(), null);
+            // 丢弃后续调度：如果该jobId对应job线程处于运行中，直接返回不进入队列
             if (ExecutorBlockStrategyEnum.DISCARD_LATER == blockStrategy) {
                 // discard when running
                 if (jobThread.isRunningOrHasQueue()) {
                     return new ReturnT<String>(ReturnT.FAIL_CODE, "block strategy effect："+ExecutorBlockStrategyEnum.DISCARD_LATER.getTitle());
                 }
             } else if (ExecutorBlockStrategyEnum.COVER_EARLY == blockStrategy) {
+                // 覆盖之前调度：杀死运行jobId对应job线程
                 // kill running jobThread
                 if (jobThread.isRunningOrHasQueue()) {
                     removeOldReason = "block strategy effect：" + ExecutorBlockStrategyEnum.COVER_EARLY.getTitle();
@@ -134,16 +139,19 @@ public class ExecutorBizImpl implements ExecutorBiz {
                     jobThread = null;
                 }
             } else {
+                // 单机串行：什么也不做
                 // just queue trigger
             }
         }
 
         // replace thread (new or exists invalid)
         if (jobThread == null) {
+            // 重新启动新线程，暂停old线程(如果存在的话)
             jobThread = XxlJobExecutor.registJobThread(triggerParam.getJobId(), jobHandler, removeOldReason);
         }
 
         // push data to queue
+        // 入队列 triggerQueue
         ReturnT<String> pushResult = jobThread.pushTriggerQueue(triggerParam);
         return pushResult;
     }
