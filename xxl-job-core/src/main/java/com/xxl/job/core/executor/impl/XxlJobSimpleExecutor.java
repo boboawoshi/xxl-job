@@ -30,7 +30,6 @@ public class XxlJobSimpleExecutor extends XxlJobExecutor {
     }
 
 
-    @Override
     public void start() {
 
         // init JobHandler Repository (for method)
@@ -44,7 +43,6 @@ public class XxlJobSimpleExecutor extends XxlJobExecutor {
         }
     }
 
-    @Override
     public void destroy() {
         super.destroy();
     }

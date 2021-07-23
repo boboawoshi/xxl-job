@@ -92,8 +92,7 @@ public class JobThread extends Thread{
 
     @Override
 	public void run() {
-		// handler 是在 initJobHandlerMethodRepository 里面注册的
-		// 默认的 registJobHandler(name, new MethodJobHandler(bean, method, initMethod, destroyMethod));
+
     	// init
     	try {
 			handler.init();
@@ -109,8 +108,6 @@ public class JobThread extends Thread{
             TriggerParam triggerParam = null;
             try {
 				// to check toStop signal, we need cycle, so wo cannot use queue.take(), instand of poll(timeout)
-				// poll(time):取走BlockingQueue里排在首位的对象,若不能立即取出,则可以等time参数规定的时间, 取不到时返回null;
-				// poll(long timeout, TimeUnit unit)：从BlockingQueue取出一个队首的对象，如果在指定时间内，队列一旦有数据可取，则立即返回队列中的数据。否则知道时间超时还没有数据可取，返回失败。
 				triggerParam = triggerQueue.poll(3L, TimeUnit.SECONDS);
 				if (triggerParam!=null) {
 					running = true;
@@ -137,7 +134,6 @@ public class JobThread extends Thread{
 						Thread futureThread = null;
 						try {
 							FutureTask<Boolean> futureTask = new FutureTask<Boolean>(new Callable<Boolean>() {
-								// 执行调度任务
 								@Override
 								public Boolean call() throws Exception {
 
@@ -226,7 +222,7 @@ public class JobThread extends Thread{
                 }
             }
         }
-		// toStop 为true后，将队列剩余任务执行掉
+
 		// callback trigger request in queue
 		while(triggerQueue !=null && triggerQueue.size()>0){
 			TriggerParam triggerParam = triggerQueue.poll();
@@ -240,7 +236,7 @@ public class JobThread extends Thread{
 				);
 			}
 		}
-		// toStop 为true后销毁任务
+
 		// destroy
 		try {
 			handler.destroy();

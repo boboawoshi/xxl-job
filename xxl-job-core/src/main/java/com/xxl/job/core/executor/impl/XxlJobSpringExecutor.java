@@ -35,13 +35,12 @@ public class XxlJobSpringExecutor extends XxlJobExecutor implements ApplicationC
         /*initJobHandlerRepository(applicationContext);*/
 
         // init JobHandler Repository (for method)
-        //这个简单自己看代码
         initJobHandlerMethodRepository(applicationContext);
 
         // refresh GlueFactory
         GlueFactory.refreshInstance(1);
 
-        // super start  这个是关键，其父类是XxlJobExecutor
+        // super start
         try {
             super.start();
         } catch (Exception e) {
@@ -86,12 +85,16 @@ public class XxlJobSpringExecutor extends XxlJobExecutor implements ApplicationC
         String[] beanDefinitionNames = applicationContext.getBeanNamesForType(Object.class, false, true);
         for (String beanDefinitionName : beanDefinitionNames) {
             Object bean = applicationContext.getBean(beanDefinitionName);
-            // 扫描有XxlJob注解的方法，并注册
-            // referred to ：org.springframework.context.event.EventListenerMethodProcessor.processBean
-            Map<Method, XxlJob> annotatedMethods = null;
+
+            Map<Method, XxlJob> annotatedMethods = null;   // referred to ：org.springframework.context.event.EventListenerMethodProcessor.processBean
             try {
                 annotatedMethods = MethodIntrospector.selectMethods(bean.getClass(),
-                        (MethodIntrospector.MetadataLookup<XxlJob>) method -> AnnotatedElementUtils.findMergedAnnotation(method, XxlJob.class));
+                        new MethodIntrospector.MetadataLookup<XxlJob>() {
+                            @Override
+                            public XxlJob inspect(Method method) {
+                                return AnnotatedElementUtils.findMergedAnnotation(method, XxlJob.class);
+                            }
+                        });
             } catch (Throwable ex) {
                 logger.error("xxl-job method-jobhandler resolve error for bean[" + beanDefinitionName + "].", ex);
             }

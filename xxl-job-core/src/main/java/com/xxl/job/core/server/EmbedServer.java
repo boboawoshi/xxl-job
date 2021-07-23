@@ -34,70 +34,79 @@ public class EmbedServer {
     private Thread thread;
 
     public void start(final String address, final int port, final String appname, final String accessToken) {
-        // 执行器实现类
         executorBiz = new ExecutorBizImpl();
-        thread = new Thread(() -> {
-            // param
-            EventLoopGroup bossGroup = new NioEventLoopGroup();
-            EventLoopGroup workerGroup = new NioEventLoopGroup();
-            // 定义业务线程池
-            ThreadPoolExecutor bizThreadPool = new ThreadPoolExecutor(
-                    0,
-                    200,
-                    60L,
-                    TimeUnit.SECONDS,
-                    new LinkedBlockingQueue<Runnable>(2000),
-                    r -> new Thread(r, "xxl-rpc, EmbedServer bizThreadPool-" + r.hashCode()),
-                    (r, executor) -> {
-                        throw new RuntimeException("xxl-job, EmbedServer bizThreadPool is EXHAUSTED!");
-                    });
+        thread = new Thread(new Runnable() {
 
-            try {
-                // start server
-                // 使用netty创建server，绑定对应监听端口，等待调度
-                ServerBootstrap bootstrap = new ServerBootstrap();
-                bootstrap.group(bossGroup, workerGroup)
-                        .channel(NioServerSocketChannel.class)
-                        .childHandler(new ChannelInitializer<SocketChannel>() {
+            @Override
+            public void run() {
+
+                // param
+                EventLoopGroup bossGroup = new NioEventLoopGroup();
+                EventLoopGroup workerGroup = new NioEventLoopGroup();
+                ThreadPoolExecutor bizThreadPool = new ThreadPoolExecutor(
+                        0,
+                        200,
+                        60L,
+                        TimeUnit.SECONDS,
+                        new LinkedBlockingQueue<Runnable>(2000),
+                        new ThreadFactory() {
                             @Override
-                            public void initChannel(SocketChannel channel) throws Exception {
-                                // 添加一系列入站处理handler
-                                channel.pipeline()
-                                        .addLast(new IdleStateHandler(0, 0, 30 * 3, TimeUnit.SECONDS))  // beat 3N, close if idle
-                                        .addLast(new HttpServerCodec())
-                                        .addLast(new HttpObjectAggregator(5 * 1024 * 1024))  // merge request & reponse to FULL
-                                        // 关键
-                                        .addLast(new EmbedHttpServerHandler(executorBiz, accessToken, bizThreadPool));
+                            public Thread newThread(Runnable r) {
+                                return new Thread(r, "xxl-rpc, EmbedServer bizThreadPool-" + r.hashCode());
                             }
-                        })
-                        .childOption(ChannelOption.SO_KEEPALIVE, true);
+                        },
+                        new RejectedExecutionHandler() {
+                            @Override
+                            public void rejectedExecution(Runnable r, ThreadPoolExecutor executor) {
+                                throw new RuntimeException("xxl-job, EmbedServer bizThreadPool is EXHAUSTED!");
+                            }
+                        });
 
-                // bind
-                ChannelFuture future = bootstrap.bind(port).sync();
 
-                logger.info(">>>>>>>>>>> xxl-job remoting server start success, nettype = {}, port = {}", EmbedServer.class, port);
-
-                // start registry
-                // 启动注册线程，向调度器注册，然后有30秒的心跳
-                startRegistry(appname, address);
-
-                // wait util stop
-                future.channel().closeFuture().sync();
-
-            } catch (InterruptedException e) {
-                if (e instanceof InterruptedException) {
-                    logger.info(">>>>>>>>>>> xxl-job remoting server stop.");
-                } else {
-                    logger.error(">>>>>>>>>>> xxl-job remoting server error.", e);
-                }
-            } finally {
-                // stop
                 try {
-                    workerGroup.shutdownGracefully();
-                    bossGroup.shutdownGracefully();
-                } catch (Exception e) {
-                    logger.error(e.getMessage(), e);
+                    // start server
+                    ServerBootstrap bootstrap = new ServerBootstrap();
+                    bootstrap.group(bossGroup, workerGroup)
+                            .channel(NioServerSocketChannel.class)
+                            .childHandler(new ChannelInitializer<SocketChannel>() {
+                                @Override
+                                public void initChannel(SocketChannel channel) throws Exception {
+                                    channel.pipeline()
+                                            .addLast(new IdleStateHandler(0, 0, 30 * 3, TimeUnit.SECONDS))  // beat 3N, close if idle
+                                            .addLast(new HttpServerCodec())
+                                            .addLast(new HttpObjectAggregator(5 * 1024 * 1024))  // merge request & reponse to FULL
+                                            .addLast(new EmbedHttpServerHandler(executorBiz, accessToken, bizThreadPool));
+                                }
+                            })
+                            .childOption(ChannelOption.SO_KEEPALIVE, true);
+
+                    // bind
+                    ChannelFuture future = bootstrap.bind(port).sync();
+
+                    logger.info(">>>>>>>>>>> xxl-job remoting server start success, nettype = {}, port = {}", EmbedServer.class, port);
+
+                    // start registry
+                    startRegistry(appname, address);
+
+                    // wait util stop
+                    future.channel().closeFuture().sync();
+
+                } catch (InterruptedException e) {
+                    if (e instanceof InterruptedException) {
+                        logger.info(">>>>>>>>>>> xxl-job remoting server stop.");
+                    } else {
+                        logger.error(">>>>>>>>>>> xxl-job remoting server error.", e);
+                    }
+                } finally {
+                    // stop
+                    try {
+                        workerGroup.shutdownGracefully();
+                        bossGroup.shutdownGracefully();
+                    } catch (Exception e) {
+                        logger.error(e.getMessage(), e);
+                    }
                 }
+
             }
 
         });
@@ -187,10 +196,8 @@ public class EmbedServer {
                 } else if ("/idleBeat".equals(uri)) {
                     IdleBeatParam idleBeatParam = GsonTool.fromJson(requestData, IdleBeatParam.class);
                     return executorBiz.idleBeat(idleBeatParam);
-                    // 收到调度请求
                 } else if ("/run".equals(uri)) {
                     TriggerParam triggerParam = GsonTool.fromJson(requestData, TriggerParam.class);
-                    // ExecutorBizImpl 实现类
                     return executorBiz.run(triggerParam);
                 } else if ("/kill".equals(uri)) {
                     KillParam killParam = GsonTool.fromJson(requestData, KillParam.class);

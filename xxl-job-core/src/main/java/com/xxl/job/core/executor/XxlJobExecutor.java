@@ -65,24 +65,19 @@ public class XxlJobExecutor  {
     public void start() throws Exception {
 
         // init logpath
-        //初始化日志路径，可以自定义或者用默认的
-        //默认：/data/applogs/xxl-job/jobhandler
         XxlJobFileAppender.initLogPath(logPath);
 
         // init invoker, admin-client
-        //初始化调度中心地址，支持集群
         initAdminBizList(adminAddresses, accessToken);
 
+
         // init JobLogFileCleanThread
-        // 初始化日志清理守护线程，比如清理超过30天的日志
         JobLogFileCleanThread.getInstance().start(logRetentionDays);
 
         // init TriggerCallbackThread
-        // 初始化回调调度平台的守护线程，重点分析一
         TriggerCallbackThread.getInstance().start();
 
         // init executor-server
-        //初始化执行器，重点分析二
         initEmbedServer(address, ip, port, appname, accessToken);
     }
     public void destroy(){
@@ -159,7 +154,6 @@ public class XxlJobExecutor  {
 
         // start
         embedServer = new EmbedServer();
-        // 关键
         embedServer.start(address, port, appname, accessToken);
     }
 
@@ -187,9 +181,7 @@ public class XxlJobExecutor  {
 
 
     // ---------------------- job thread repository ----------------------
-
     private static ConcurrentMap<Integer, JobThread> jobThreadRepository = new ConcurrentHashMap<Integer, JobThread>();
-    // 注册job线程--JobThread
     public static JobThread registJobThread(int jobId, IJobHandler handler, String removeOldReason){
         JobThread newJobThread = new JobThread(jobId, handler);
         newJobThread.start();
