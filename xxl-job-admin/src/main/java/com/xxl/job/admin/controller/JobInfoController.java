@@ -142,6 +142,7 @@ public class JobInfoController {
 	//@PermissionLimit(limit = false)
 	public ReturnT<String> triggerJob(int id, String executorParam, String addressList) {
 		// force cover job param
+		//执行job的入口
 		if (executorParam == null) {
 			executorParam = "";
 		}

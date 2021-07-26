@@ -10,7 +10,7 @@ public enum ScheduleTypeEnum {
     NONE(I18nUtil.getString("schedule_type_none")),
 
     /**
-     * schedule by cron
+     * schedule by cron，通过时间调度
      */
     CRON(I18nUtil.getString("schedule_type_cron")),
 

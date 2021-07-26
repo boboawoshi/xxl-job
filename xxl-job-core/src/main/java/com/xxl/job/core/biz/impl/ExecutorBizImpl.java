@@ -46,7 +46,7 @@ public class ExecutorBizImpl implements ExecutorBiz {
     @Override
     public ReturnT<String> run(TriggerParam triggerParam) {
         // load old：jobHandler + jobThread
-        // 查询是否缓存过对应job的执行线程
+        // 查询是否缓存过对应job的执行线程， ( 第一次进来是没有线程的，jobThread为空 ）
         JobThread jobThread = XxlJobExecutor.loadJobThread(triggerParam.getJobId());
         IJobHandler jobHandler = jobThread!=null?jobThread.getHandler():null;
         String removeOldReason = null;
@@ -57,9 +57,12 @@ public class ExecutorBizImpl implements ExecutorBiz {
         if (GlueTypeEnum.BEAN == glueTypeEnum) {
 
             // new jobhandler
+            // 通过参数中的handlerName从本地内存中获取handler实例
+            // （在执行器启动的时候，是把所有带有@XXL-job的实例通过name放入到一个map中的 ）
             IJobHandler newJobHandler = XxlJobExecutor.loadJobHandler(triggerParam.getExecutorHandler());
 
             // valid old jobThread
+            // 如果修改了任务的handler， name此处会默认把以前老的handler清空，后面会以最新的newJobHandler为准
             if (jobThread!=null && jobHandler != newJobHandler) {
                 // change handler, need kill old thread
                 removeOldReason = "change jobhandler or glue type, and terminate the old job thread.";
@@ -145,13 +148,15 @@ public class ExecutorBizImpl implements ExecutorBiz {
         }
 
         // replace thread (new or exists invalid)
+        // 如果jobThread为空，那么这个时候，就要注册一个线程到本地线程库里面去。
+        // 然后启动这个线程，线程会轮询任务队列开始执行，可以查看JobThread.run方法
         if (jobThread == null) {
             // 重新启动新线程，暂停old线程(如果存在的话)
             jobThread = XxlJobExecutor.registJobThread(triggerParam.getJobId(), jobHandler, removeOldReason);
         }
 
         // push data to queue
-        // 入队列 triggerQueue
+        // 任务线程已经存在了，将任务参数放入任务队列，每个任务线程有一个任务队列，任务线程去轮询这个任务
         ReturnT<String> pushResult = jobThread.pushTriggerQueue(triggerParam);
         return pushResult;
     }

@@ -84,7 +84,7 @@ public class XxlJobScheduler  {
             return null;
         }
 
-        // load-cache
+        // load-cache 是否在缓存中
         address = address.trim();
         ExecutorBiz executorBiz = executorBizRepository.get(address);
         if (executorBiz != null) {
@@ -93,7 +93,7 @@ public class XxlJobScheduler  {
 
         // set-cache
         executorBiz = new ExecutorBizClient(address, XxlJobAdminConfig.getAdminConfig().getAccessToken());
-
+        //对象放入缓存
         executorBizRepository.put(address, executorBiz);
         return executorBiz;
     }

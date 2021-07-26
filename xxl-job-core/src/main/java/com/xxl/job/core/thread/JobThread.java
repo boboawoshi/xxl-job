@@ -28,15 +28,15 @@ public class JobThread extends Thread{
 	private static Logger logger = LoggerFactory.getLogger(JobThread.class);
 
 	private int jobId;
-	private IJobHandler handler;
-	private LinkedBlockingQueue<TriggerParam> triggerQueue;
+	private IJobHandler handler;//任务执行对象
+	private LinkedBlockingQueue<TriggerParam> triggerQueue;//任务队列
 	private Set<Long> triggerLogIdSet;		// avoid repeat trigger for the same TRIGGER_LOG_ID
 
-	private volatile boolean toStop = false;
+	private volatile boolean toStop = false;//任务轮询是否停止标志位
 	private String stopReason;
 
 	private boolean running = false;    // if running job
-	private int idleTimes = 0;			// idel times
+	private int idleTimes = 0;			// 任务轮询次数计数
 
 
 	public JobThread(int jobId, IJobHandler handler) {
@@ -104,13 +104,15 @@ public class JobThread extends Thread{
 		// execute
 		while(!toStop){
 			running = false;
-			idleTimes++;
+			idleTimes++;//累加轮询次数
 
 			TriggerParam triggerParam = null;
 			try {
+
 				// to check toStop signal, we need cycle, so wo cannot use queue.take(), instand of poll(timeout)
 				// poll(time):取走BlockingQueue里排在首位的对象,若不能立即取出,则可以等time参数规定的时间, 取不到时返回null;
 				// poll(long timeout, TimeUnit unit)：从BlockingQueue取出一个队首的对象，如果在指定时间内，队列一旦有数据可取，则立即返回队列中的数据。否则知道时间超时还没有数据可取，返回失败。
+				//获取队列里的任务，设置3秒钟超时
 				triggerParam = triggerQueue.poll(3L, TimeUnit.SECONDS);
 				if (triggerParam!=null) {
 					running = true;
@@ -131,7 +133,7 @@ public class JobThread extends Thread{
 
 					// execute
 					XxlJobHelper.log("<br>----------- xxl-job job execute start -----------<br>----------- Param:" + xxlJobContext.getJobParam());
-
+					//超时的任务执行
 					if (triggerParam.getExecutorTimeout() > 0) {
 						// limit timeout
 						Thread futureThread = null;
@@ -148,9 +150,10 @@ public class JobThread extends Thread{
 									return true;
 								}
 							});
+							//启动线程执行任务
 							futureThread = new Thread(futureTask);
 							futureThread.start();
-
+							//获取执行任务结果
 							Boolean tempResult = futureTask.get(triggerParam.getExecutorTimeout(), TimeUnit.SECONDS);
 						} catch (TimeoutException e) {
 
@@ -184,6 +187,7 @@ public class JobThread extends Thread{
 					);
 
 				} else {
+					//超过一定次数，清空线程，并设置JobThread的stop停止标识位，终止轮询。也就是3*jobEmptyLoopNum秒空轮询
 					if (idleTimes > 30) {
 						if(triggerQueue.size() == 0) {	// avoid concurrent trigger causes jobId-lost
 							XxlJobExecutor.removeJobThread(jobId, "excutor idel times over limit.");

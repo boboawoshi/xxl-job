@@ -77,6 +77,9 @@ public class JobTriggerPoolHelper {
                            final String addressList) {
 
         // choose thread pool
+        //这里区分了快慢线程池，1分钟内请求大于10次，放入慢线程池处理   耗时超过500ms就计算为慢请求，加入慢线程池。
+        //快线程池默认10个核心线程，最大线程200，任务队列1000
+        //慢线程池默认10个核心线程，最大线程100，任务队列2000
         ThreadPoolExecutor triggerPool_ = fastTriggerPool;
         AtomicInteger jobTimeoutCount = jobTimeoutCountMap.get(jobId);
         if (jobTimeoutCount!=null && jobTimeoutCount.get() > 10) {      // job-timeout 10 times in 1 min
@@ -84,38 +87,36 @@ public class JobTriggerPoolHelper {
         }
 
         // trigger
-        triggerPool_.execute(new Runnable() {
-            @Override
-            public void run() {
+        triggerPool_.execute(() -> {
 
-                long start = System.currentTimeMillis();
+            long start = System.currentTimeMillis();
 
-                try {
-                    // do trigger
-                    XxlJobTrigger.trigger(jobId, triggerType, failRetryCount, executorShardingParam, executorParam, addressList);
-                } catch (Exception e) {
-                    logger.error(e.getMessage(), e);
-                } finally {
+            try {
+                // do trigger
+                //触发执行任务
+                XxlJobTrigger.trigger(jobId, triggerType, failRetryCount, executorShardingParam, executorParam, addressList);
+            } catch (Exception e) {
+                logger.error(e.getMessage(), e);
+            } finally {
 
-                    // check timeout-count-map
-                    long minTim_now = System.currentTimeMillis()/60000;
-                    if (minTim != minTim_now) {
-                        minTim = minTim_now;
-                        jobTimeoutCountMap.clear();
+                // check timeout-count-map
+                long minTim_now = System.currentTimeMillis()/60000;
+                if (minTim != minTim_now) {
+                    minTim = minTim_now;
+                    jobTimeoutCountMap.clear();
+                }
+
+                // incr timeout-count-map
+                long cost = System.currentTimeMillis()-start;
+                if (cost > 500) {       // ob-timeout threshold 500ms  //耗时超过500ms就计算为慢请求，加入慢线程池。
+                    AtomicInteger timeoutCount = jobTimeoutCountMap.putIfAbsent(jobId, new AtomicInteger(1));
+                    if (timeoutCount != null) {
+                        timeoutCount.incrementAndGet();
                     }
-
-                    // incr timeout-count-map
-                    long cost = System.currentTimeMillis()-start;
-                    if (cost > 500) {       // ob-timeout threshold 500ms
-                        AtomicInteger timeoutCount = jobTimeoutCountMap.putIfAbsent(jobId, new AtomicInteger(1));
-                        if (timeoutCount != null) {
-                            timeoutCount.incrementAndGet();
-                        }
-                    }
-
                 }
 
             }
+
         });
     }
 
