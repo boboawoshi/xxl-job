@@ -24,16 +24,18 @@ public class XxlJobScheduler  {
         // init i18n
         initI18n();
 
-        // admin trigger pool start
+        // admin trigger pool start,初始化fastTriggerPool、slowTriggerPool快慢线程池
         JobTriggerPoolHelper.toStart();
 
         // admin registry monitor run
+        //清除过期的，并更新xx_job_group、xxl_job_registry
         JobRegistryHelper.getInstance().start();
 
-        // admin fail-monitor run
+        // admin fail-monitor run，失败重试及通知
+        //启动失败日志监控器（失败重试，失败邮件发送）
         JobFailMonitorHelper.getInstance().start();
 
-        // admin lose-monitor run ( depend on JobTriggerPoolHelper )
+        // admin lose-monitor run ( depend on JobTriggerPoolHelper )，将超时的任务置为失败
         JobCompleteHelper.getInstance().start();
 
         // admin log report start
